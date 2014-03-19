@@ -32,7 +32,7 @@ public class Debug {
 	final static String className = ClientComms.class.getName();
 	Logger log = LoggerFactory.getLogger(LoggerFactory.MQTT_CLIENT_MSG_CAT,className);
 	
-	static String separator = "==============";
+	static String separator = "===============";
 	static String lineSep = System.getProperty("line.separator","\n");
 	
 	String clientID;
