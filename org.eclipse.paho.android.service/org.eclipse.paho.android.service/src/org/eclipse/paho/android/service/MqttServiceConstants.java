@@ -69,6 +69,10 @@ public interface MqttServiceConstants {
                                               + ".ERROR_NUMBER";
 
   static final String CALLBACK_EXCEPTION = MqttService.TAG + ".exception";
+  
+  //Intent prefix for Ping sender.
+  static final String PING_SENDER = MqttService.TAG + ".pingSender.";
+  static final String PING_WAKELOCK = MqttService.TAG + ".client.";
 
   //exception code for non mqttexceptions
   static final int NON_MQTT_EXCEPTION = -1;

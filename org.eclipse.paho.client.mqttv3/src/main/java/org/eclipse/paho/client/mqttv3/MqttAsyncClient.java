@@ -76,7 +76,7 @@ public class MqttAsyncClient implements IMqttAsyncClient { // DestinationProvide
 	protected ClientComms comms;
 	private Hashtable topics;
 	private MqttClientPersistence persistence;
-	private MqttProtocolVersion protocolVersion = MqttProtocolVersion.V3_1;
+	private MqttProtocolVersion protocolVersion;	
 
 	final static String className = MqttAsyncClient.class.getName();
 	public Logger log = LoggerFactory.getLogger(LoggerFactory.MQTT_CLIENT_MSG_CAT,className);
@@ -153,6 +153,10 @@ public class MqttAsyncClient implements IMqttAsyncClient { // DestinationProvide
 	 */
 	public MqttAsyncClient(String serverURI, String clientId) throws MqttException {
 		this(serverURI,clientId, new MqttDefaultFilePersistence());
+	}
+	
+	public MqttAsyncClient(String serverURI, String clientId, MqttClientPersistence persistence) throws MqttException {
+		this(serverURI,clientId, new MqttDefaultFilePersistence(), new TimerPingSender());
 	}
 
 	/**
@@ -239,7 +243,7 @@ public class MqttAsyncClient implements IMqttAsyncClient { // DestinationProvide
 	 * @throws IllegalArgumentException if the clientId is null or is greater than 23 characters in length
 	 * @throws MqttException if any other problem was encountered
 	 */
-	public MqttAsyncClient(String serverURI, String clientId, MqttClientPersistence persistence) throws MqttException {
+	public MqttAsyncClient(String serverURI, String clientId, MqttClientPersistence persistence, MqttPingSender pingSender) throws MqttException {
 		final String methodName = "MqttAsyncClient";
 
 		log.setResourceName(clientId);
@@ -272,11 +276,13 @@ public class MqttAsyncClient implements IMqttAsyncClient { // DestinationProvide
 		log.fine(className,methodName,"101",new Object[]{clientId,serverURI,persistence});
 
 		this.persistence.open(clientId, serverURI);
-		this.comms = new ClientComms(this, this.persistence);
+		this.comms = new ClientComms(this, this.persistence, pingSender);
 		this.persistence.close();
 		this.topics = new Hashtable();
 
 	}
+	
+	
 
 	/**
 	 * @param ch
@@ -607,7 +613,30 @@ public class MqttAsyncClient implements IMqttAsyncClient { // DestinationProvide
 		}
 		return result;
 	}
-
+	
+	/* (non-Javadoc)
+	 * Check and send a ping if needed.
+	 * <p>By default, client sends PingReq to server to keep the connection to 
+	 * server. For some platforms which cannot use this mechanism, such as Android,
+	 * developer needs to handle the ping request manually with this method.
+	 * </p>
+	 * 
+	 * @throws MqttException for other errors encountered while publishing the message.
+	 */
+	public IMqttToken checkPing(Object userContext, IMqttActionListener callback) throws MqttException{
+		final String methodName = "ping";
+		MqttToken token;
+		//@TRACE 117=>
+		log.fine(className,methodName,"117");
+		
+		token = comms.checkForActivity();
+		//@TRACE 118=<
+		log.fine(className,methodName,"118");
+		
+		return token;
+	}
+	
+	
 	/* (non-Javadoc)
 	 * @see org.eclipse.paho.client.mqttv3.IMqttAsyncClient#subscribe(java.lang.String, int, java.lang.Object, org.eclipse.paho.client.mqttv3.IMqttActionListener)
 	 */

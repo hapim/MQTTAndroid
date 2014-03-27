@@ -613,6 +613,15 @@ public class MqttService extends Service implements MqttTraceHandler {
   public void setTraceEnabled(boolean traceEnabled) {
     this.traceEnabled = traceEnabled;
   }
+  
+  /**
+   * Check whether trace is on or off.
+   * 
+   * @return the state of trace
+   */
+  public boolean isTraceEnabled(){
+	  return this.traceEnabled;
+  }
 
   /**
    * trace debugging information
@@ -625,6 +634,7 @@ public class MqttService extends Service implements MqttTraceHandler {
   @Override
   public void traceDebug(String tag, String message) {
     traceCallback("debug", message);
+    Log.d(tag, message);
   }
 
   /**
