@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
+import org.eclipse.paho.android.service.MessageStore.StoredMessage;
 import org.eclipse.paho.client.mqttv3.IMqttActionListener;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.IMqttToken;
@@ -31,12 +32,11 @@ import org.eclipse.paho.client.mqttv3.MqttPersistenceException;
 import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence;
 
 import android.app.Service;
+import android.content.Context;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 import android.util.Log;
-
-import org.eclipse.paho.android.service.MessageStore.StoredMessage;
 
 /**
  * <p>
@@ -163,14 +163,20 @@ class MqttServiceClient implements MqttCallback {
         File myDir = service.getExternalFilesDir(TAG);
 
         if (myDir == null) {
-          resultBundle.putString(
-              MqttServiceConstants.CALLBACK_ERROR_MESSAGE,
-              "No external storage available");
-          resultBundle.putSerializable(
-              MqttServiceConstants.CALLBACK_EXCEPTION, new MqttPersistenceException());
-          service.callbackToActivity(clientHandle, Status.ERROR,
-              resultBundle);
-          return;
+          //No external storage, use internal storage instead.
+          myDir = service.getDir(TAG, Context.MODE_PRIVATE);
+          
+          if(myDir == null){
+        	  //Shouldn't happen.
+	          resultBundle.putString(
+	              MqttServiceConstants.CALLBACK_ERROR_MESSAGE,
+	              "Error! No external and internal storage available");
+	          resultBundle.putSerializable(
+	              MqttServiceConstants.CALLBACK_EXCEPTION, new MqttPersistenceException());
+	          service.callbackToActivity(clientHandle, Status.ERROR,
+	              resultBundle);
+	          return;
+          }
         }
 
         // use that to setup MQTT client persistence storage
@@ -178,7 +184,8 @@ class MqttServiceClient implements MqttCallback {
             myDir.getAbsolutePath());
       }
 
-      myClient = new MqttAsyncClient(serverURI, clientId, persistence);
+      myClient = new MqttAsyncClient(serverURI, clientId, persistence, 
+    		  new AlarmPingSender(service));
       myClient.setCallback(this);
       IMqttActionListener listener = new MqttServiceClientListener(
           resultBundle) {
@@ -191,6 +198,8 @@ class MqttServiceClient implements MqttCallback {
           service.callbackToActivity(clientHandle, Status.OK,
               resultBundle);
           deliverBacklog();
+          
+          releaseWakeLock();
         }
       };
       myClient.connect(connectOptions, invocationContext, listener);
@@ -639,6 +648,7 @@ class MqttServiceClient implements MqttCallback {
    */
   @Override
   public void connectionLost(Throwable why) {
+	  why.printStackTrace();
     service.traceDebug(TAG, "connectionLost(" + why.getMessage() + ")");
 
     try {
@@ -789,8 +799,9 @@ class MqttServiceClient implements MqttCallback {
    * Releases the currently held wake lock for this client
    */
   private void releaseWakeLock() {
-    wakelock.release();
-
+	  if(wakelock.isHeld()){
+		  wakelock.release();
+	  }
   }
 
   /**

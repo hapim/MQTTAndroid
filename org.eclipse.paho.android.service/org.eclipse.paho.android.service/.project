@@ -30,4 +30,21 @@
 		<nature>com.android.ide.eclipse.adt.AndroidNature</nature>
 		<nature>org.eclipse.jdt.core.javanature</nature>
 	</natures>
+	<linkedResources>
+		<link>
+			<name>java-templates</name>
+			<type>2</type>
+			<location>/Users/patrickleong/Documents/Developer/git.repo/org.eclipse.paho.mqtt.java/org.eclipse.paho.client.mqttv3/src/main/java-templates</location>
+		</link>
+		<link>
+			<name>paho</name>
+			<type>2</type>
+			<location>/Users/patrickleong/Documents/Developer/git.repo/org.eclipse.paho.mqtt.java/org.eclipse.paho.client.mqttv3/src/main/java</location>
+		</link>
+		<link>
+			<name>resources</name>
+			<type>2</type>
+			<location>/Users/patrickleong/Documents/Developer/git.repo/org.eclipse.paho.mqtt.java/org.eclipse.paho.client.mqttv3/src/main/resources</location>
+		</link>
+	</linkedResources>
 </projectDescription>

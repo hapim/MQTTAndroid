@@ -305,8 +305,9 @@ public class MqttClientAndroidService extends BroadcastReceiver implements
 
       // We bind with BIND_SERVICE_FLAG (0), leaving us the manage the lifecycle
       // until the last time it is stopped by a call to stopService()
+      myContext.startService(serviceStartIntent);
       myContext.bindService(serviceStartIntent, serviceConnection,
-          BIND_SERVICE_FLAG);
+          Context.BIND_AUTO_CREATE);
 
       IntentFilter filter = new IntentFilter();
       filter.addAction(MqttServiceConstants.CALLBACK_TO_ACTIVITY);
@@ -318,7 +319,6 @@ public class MqttClientAndroidService extends BroadcastReceiver implements
         @Override
         public void run() {
           doConnect();
-
         }
 
       });
