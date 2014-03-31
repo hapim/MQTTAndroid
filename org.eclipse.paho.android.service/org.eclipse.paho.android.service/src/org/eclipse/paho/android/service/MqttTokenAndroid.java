@@ -22,10 +22,10 @@ import org.eclipse.paho.client.mqttv3.MqttSecurityException;
 /**
  * <p>
  * Implementation of the IMqttToken interface for use from within the
- * MqttClientAndroidService implementation
+ * MqttAndroidClient implementation
  */
 
-class MqttTokenAndroidService implements IMqttToken {
+class MqttTokenAndroid implements IMqttToken {
 
   private IMqttActionListener listener;
 
@@ -35,7 +35,7 @@ class MqttTokenAndroidService implements IMqttToken {
 
   private Object waitObject = new Object();
 
-  private MqttClientAndroidService client;
+  private MqttAndroidClient client;
 
   private Object userContext;
 
@@ -52,7 +52,7 @@ class MqttTokenAndroidService implements IMqttToken {
    * @param userContext
    * @param listener
    */
-  MqttTokenAndroidService(MqttClientAndroidService client,
+  MqttTokenAndroid(MqttAndroidClient client,
       Object userContext, IMqttActionListener listener) {
     this(client, userContext, listener, (String[]) null);
   }
@@ -65,7 +65,7 @@ class MqttTokenAndroidService implements IMqttToken {
    * @param listener
    * @param topics
    */
-  MqttTokenAndroidService(MqttClientAndroidService client,
+  MqttTokenAndroid(MqttAndroidClient client,
       Object userContext, IMqttActionListener listener, String[] topics) {
     this.client = client;
     this.userContext = userContext;

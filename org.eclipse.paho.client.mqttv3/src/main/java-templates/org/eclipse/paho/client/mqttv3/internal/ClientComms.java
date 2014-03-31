@@ -620,8 +620,6 @@ public class ClientComms {
 		try{
 			token = clientState.checkForActivity();
 		}catch(MqttException e){
-			//TODO: Throw proper exception, shutdown connections as previous checkfor acitvy do.
-			e.printStackTrace();
 			handleRunException(e);
 		}catch(Exception e){
 			handleRunException(e);
