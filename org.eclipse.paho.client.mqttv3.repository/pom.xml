@@ -16,27 +16,19 @@
 				<artifactId>tycho-maven-plugin</artifactId>
 			</plugin>
 			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-dependency-plugin</artifactId>
-				<version>2.8</version>
+				<groupId>org.eclipse.tycho.extras</groupId>
+				<artifactId>tycho-p2-extras-plugin</artifactId>
 				<executions>
 					<execution>
-						<id>unpack</id>
+						<id>update-main-p2-repo</id>
 						<phase>package</phase>
 						<goals>
-							<goal>unpack</goal>
+							<goal>publish-features-and-bundle</goal>
 						</goals>
 						<configuration>
-							<artifactItems>
-								<artifactItem>
-									<groupId>org.eclipse.paho</groupId>
-									<artifactId>org.eclipse.paho.client.mqttv3.repository</artifactId>
-									<version>${paho.version}</version>
-									<type>zip</type>
-									<overWrite>true</overWrite>
-									<outputDirectory>/shared/technology/paho/Java/client</outputDirectory>
-								</artifactItem>
-							</artifactItems>
+							<append>true</append>
+							<artifactRepositoryLocation>/shared/technology/paho/Java/client</artifactRepositoryLocation>
+							<sourceLocation>${project.build.directory}</sourceLocation>
 						</configuration>
 					</execution>
 				</executions>
