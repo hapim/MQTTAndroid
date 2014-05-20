@@ -23,7 +23,7 @@
 						<id>update-main-p2-repo</id>
 						<phase>package</phase>
 						<goals>
-							<goal>publish-features-and-bundle</goal>
+							<goal>publish-features-and-bundles</goal>
 						</goals>
 						<configuration>
 							<append>true</append>
