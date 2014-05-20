@@ -34,12 +34,9 @@
 									<version>${paho.version}</version>
 									<type>zip</type>
 									<overWrite>false</overWrite>
-									<outputDirectory>${project.build.directory}</outputDirectory>
+									<outputDirectory>/shared/technology/paho/Java/</outputDirectory>
 								</artifactItem>
 							</artifactItems>
-							<outputDirectory>/shared/technology/paho/Java/</outputDirectory>
-							<overWriteReleases>false</overWriteReleases>
-							<overWriteSnapshots>true</overWriteSnapshots>
 						</configuration>
 					</execution>
 				</executions>
