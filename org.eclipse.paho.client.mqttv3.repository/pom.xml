@@ -34,7 +34,7 @@
 									<version>${paho.version}</version>
 									<type>zip</type>
 									<overWrite>true</overWrite>
-									<outputDirectory>/shared/technology/paho/Java/</outputDirectory>
+									<outputDirectory>/shared/technology/paho/Java/client</outputDirectory>
 								</artifactItem>
 							</artifactItems>
 						</configuration>
