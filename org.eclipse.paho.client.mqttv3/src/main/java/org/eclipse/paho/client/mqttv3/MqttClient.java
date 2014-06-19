@@ -91,7 +91,7 @@ public class MqttClient implements IMqttClient { //), DestinationProvider {
 	 * </p>
 	 *
 	 * <p>
-	 * A client identifier <code>clientId</code> must be specified and be less that 65535 characters.
+	 * A client identifier <code>clientId</code> must be specified and be between 1 and 23 characters long.
 	 * It must be unique across all clients connecting to the same
 	 * server. The clientId is used by the server to store data related to the client,
 	 * hence it is important that the clientId remain the same when connecting to a server
@@ -165,7 +165,7 @@ public class MqttClient implements IMqttClient { //), DestinationProvider {
 	 * </p>
 	 *
 	 * <p>
-	 * A client identifier <code>clientId</code> must be specified and be less that 65535 characters.
+	 * A client identifier <code>clientId</code> must be specified and be between 1 and 23 characters long.
 	 * It must be unique across all clients connecting to the same
 	 * server. The clientId is used by the server to store data related to the client,
 	 * hence it is important that the clientId remain the same when connecting to a server
