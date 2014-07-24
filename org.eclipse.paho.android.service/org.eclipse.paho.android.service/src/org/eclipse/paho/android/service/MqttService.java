@@ -12,6 +12,7 @@
  */
 package org.eclipse.paho.android.service;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -23,6 +24,8 @@ import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.MqttPersistenceException;
 import org.eclipse.paho.client.mqttv3.MqttSecurityException;
 
+import android.app.ActivityManager;
+import android.app.ActivityManager.RunningTaskInfo;
 import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -216,34 +219,50 @@ import android.util.Log;
  */
 public class MqttService extends Service implements MqttTraceHandler {
 
-  // Identifier for Intents, log messages, etc..
-  static final String TAG = "MqttService";
+	// Identifier for Intents, log messages, etc..
+	static final String TAG = "MqttService";
 
-  // callback id for making trace callbacks to the Activity
-  // needs to be set by the activity as appropriate
-  private String traceCallbackId;
-  // state of tracing
-  private boolean traceEnabled = false;
+	// callback id for making trace callbacks to the Activity
+	// needs to be set by the activity as appropriate
+	private String traceCallbackId;
+	// state of tracing
+	private boolean traceEnabled = false;
 
-  // somewhere to persist received messages until we're sure
-  // that they've reached the application
-  MessageStore messageStore;
+	// state of app
+	private boolean isAppRunning = false;
 
-  // An intent receiver to deal with changes in network connectivity
-  private NetworkConnectionIntentReceiver networkConnectionMonitor;
+	// service notification store
+	private ServiceNotificationCallbackStore serviceNTFCallbackStore = null;
 
-  //a receiver to recognise when the user changes the "background data" preference
-  // and a flag to track that preference
-  // Only really relevant below android version ICE_CREAM_SANDWICH - see
-  // android docs
-  private BackgroundDataPreferenceReceiver backgroundDataPreferenceMonitor;
-  private volatile boolean backgroundDataEnabled = true;
-  
-  // a way to pass ourself back to the activity
-  private MqttServiceBinder mqttServiceBinder;
+	// service notification call back
+	private MqttServiceNotificationCallback serviceNTFCallback = null;
 
-  // mapping from client handle strings to actual client connections.
-  private Map<String/* clientHandle */, MqttConnection/* client */> connections = new ConcurrentHashMap<String, MqttConnection>();
+	// somewhere to persist received messages until we're sure
+	// that they've reached the application
+	MessageStore messageStore;
+
+	// For recover connection
+	DatabaseConnectionPersistence persistence;
+
+	// An intent receiver to deal with changes in network connectivity
+	private NetworkConnectionIntentReceiver networkConnectionMonitor;
+
+	// a receiver to recognise when the user changes the "background data"
+	// preference
+	// and a flag to track that preference
+	// Only really relevant below android version ICE_CREAM_SANDWICH - see
+	// android docs
+	private BackgroundDataPreferenceReceiver backgroundDataPreferenceMonitor;
+	private volatile boolean backgroundDataEnabled = true;
+
+	// a way to pass ourself back to the activity
+	private MqttServiceBinder mqttServiceBinder;
+
+	// mapping from client handle strings to actual client connections.
+	private Map<String/* clientHandle */, MqttConnection/* client */> connections = new ConcurrentHashMap<String, MqttConnection>();
+	// mapping from client handle strings to store ModelConnections to delete
+	// persist connection info.
+	private Map<String/* clientHandle */, ModelConnectionPersistence/* connection */> modelConnections = new ConcurrentHashMap<String, ModelConnectionPersistence>();
 
   public MqttService() {
     super();
@@ -277,68 +296,109 @@ public class MqttService extends Service implements MqttTraceHandler {
     sendBroadcast(callbackIntent);
   }
 
-  // The major API implementation follows :-
+	// The major API implementation follows :-
 
-  /**
-   * Get an MqttConnection object to represent a connection to a server
-   * 
-   * @param serverURI specifies the protocol, host name and port to be used to connect to an MQTT server
-   * @param clientId specifies the name by which this connection should be identified to the server
-   * @param contextId specifies the app conext info to make a difference between apps
-   * @return a string to be used by the Activity as a "handle" for this
-   *         MqttConnection
-   */
-  public String getClient(String serverURI, String clientId, String contextId,MqttClientPersistence persistence) {
-    String clientHandle = serverURI + ":" + clientId+":"+contextId;
-    if (!connections.containsKey(clientHandle)) {
-      MqttConnection client = new MqttConnection(this, serverURI,
-          clientId, persistence, clientHandle);
-      connections.put(clientHandle, client);
-    }
-    return clientHandle;
-  }
-
-  /**
-   * Connect to the MQTT server specified by a particular client
-   * 
-   * @param clientHandle
-   *            identifies the MqttConnection to use
-   * @param connectOptions
-   *            the MQTT connection options to be used
-   * @param invocationContext
-   *            arbitrary data to be passed back to the application
-   * @param activityToken
-   *            arbitrary identifier to be passed back to the Activity
-   * @throws MqttSecurityException
-   * @throws MqttException
-   */
-  public void connect(String clientHandle, MqttConnectOptions connectOptions,
-      String invocationContext, String activityToken)
-      throws MqttSecurityException, MqttException {
-    MqttConnection client = getConnection(clientHandle);
-    client.connect(connectOptions, invocationContext, activityToken);
-  }
-  
-  /**
-   * Request all clients to reconnect if appropriate
-   */
-  void reconnect() {
-	traceDebug(TAG, "Reconnect to server, client size=" + connections.size());
-	for (MqttConnection client : connections.values()) {
-		client.reconnect();
+	/**
+	 * Get an MqttConnection object to represent a connection to a server
+	 * 
+	 * @param serverURI
+	 *            specifies the protocol, host name and port to be used to
+	 *            connect to an MQTT server
+	 * @param clientId
+	 *            specifies the name by which this connection should be
+	 *            identified to the server
+	 * @param contextId
+	 *            specifies the app conext info to make a difference between
+	 *            apps
+	 * @return a string to be used by the Activity as a "handle" for this
+	 *         MqttConnection
+	 */
+	public String getClient(String serverURI, String clientId,
+			String contextId, MqttClientPersistence persistence) {
+		String clientHandle = serverURI + ":" + clientId + ":" + contextId;
+		Log.i(TAG, "Get cient Handle in service: " + clientHandle);
+		if (!connections.containsKey(clientHandle)) {
+			MqttConnection client = new MqttConnection(this, serverURI,
+					clientId, persistence, clientHandle);
+			connections.put(clientHandle, client);
+		}
+		return clientHandle;
 	}
-  }
-  
-  /**
-   * Close connection from a particular client
-   * 
-   * @param clientHandle
-   *            identifies the MqttConnection to use
-   */
-  public void close(String clientHandle) {
-    MqttConnection client = getConnection(clientHandle);
-    client.close();
-  }
+
+	/**
+	 * Connect to the MQTT server specified by a particular client
+	 * 
+	 * @param clientHandle
+	 *            identifies the MqttConnection to use
+	 * @param connectOptions
+	 *            the MQTT connection options to be used
+	 * @param invocationContext
+	 *            arbitrary data to be passed back to the application
+	 * @param activityToken
+	 *            arbitrary identifier to be passed back to the Activity
+	 * @throws MqttSecurityException
+	 * @throws MqttException
+	 */
+	public void connect(String clientHandle, MqttConnectOptions connectOptions,
+			String invocationContext, String activityToken)
+			throws MqttSecurityException, MqttException {
+		MqttConnection client = getConnection(clientHandle);
+		client.connect(connectOptions, invocationContext, activityToken);
+		Log.i(TAG,"connect action handle:" +  clientHandle);
+		String[] connectionsurl = client.getServerURI().split(":");
+		String[] handles = client.getClientHandle().split(":");
+		boolean issll = connectionsurl[0].startsWith("ssl") ? true : false;
+
+		ModelConnectionPersistence con = ModelConnectionPersistence
+				.createConnection(client.getClientId(),
+						connectionsurl[1].substring(2),
+						Integer.valueOf(connectionsurl[2]),
+						this.getApplicationContext(), issll, null);
+		con.addConnectionOptions(connectOptions);
+		con.setCtxId(handles[handles.length - 1]);
+		try {
+			persistence.persistConnection(con);
+			modelConnections.put(clientHandle, con);
+		} catch (ConnectionPersistenceException e) {
+			e.printStackTrace();
+		}
+	}
+
+	/**
+	 * Request all clients to reconnect if appropriate
+	 */
+	void reconnect() {
+		traceDebug(TAG,
+				"Reconnect to server, client size=" + connections.size());
+		for (MqttConnection client : connections.values()) {
+			traceDebug("Reconnect Client:",
+					client.getClientId() + '/' + client.getServerURI());
+
+			// persist model connection data to retrieve persistId with
+			// clientHandle;
+			String[] connectionsurl = client.getServerURI().split(":");
+			boolean issll = connectionsurl[0].startsWith("ssl") ? true : false;
+			ModelConnectionPersistence con = ModelConnectionPersistence
+					.createConnection(client.getClientId(),
+							connectionsurl[1].substring(2),
+							Integer.valueOf(connectionsurl[2]),
+							this.getApplicationContext(), issll, null);
+			modelConnections.put(client.getClientHandle(), con);
+
+			client.reconnect();
+		}
+	}
+
+	/**
+	 * Close connection from a particular client
+	 * 
+	 * @param clientHandle
+	 *            identifies the MqttConnection to use
+	 */
+	public void close(String clientHandle) {
+		MqttConnection client = getConnection(clientHandle);
+		client.close();
+	}
 
   /**
    * Disconnect from the server
@@ -356,101 +416,105 @@ public class MqttService extends Service implements MqttTraceHandler {
     client.disconnect(invocationContext, activityToken);
     connections.remove(clientHandle);
 
+		// delete connection persistence if disconnect by user.
+		persistence.deleteConnection(modelConnections.get(clientHandle));
+		modelConnections.remove(clientHandle);
+
+		// the activity has finished using us, so we can stop the service
+		// the activities are bound with BIND_AUTO_CREATE, so the service will
+		// remain around until the last activity disconnects
+		stopSelf();
+	}
+
+	/**
+	 * Disconnect from the server
+	 * 
+	 * @param clientHandle
+	 *            identifies the MqttConnection to use
+	 * @param quiesceTimeout
+	 *            in milliseconds
+	 * @param invocationContext
+	 *            arbitrary data to be passed back to the application
+	 * @param activityToken
+	 *            arbitrary identifier to be passed back to the Activity
+	 */
+	public void disconnect(String clientHandle, long quiesceTimeout,
+			String invocationContext, String activityToken) {
+		MqttConnection client = getConnection(clientHandle);
+		client.disconnect(quiesceTimeout, invocationContext, activityToken);
+		connections.remove(clientHandle);
+
     // the activity has finished using us, so we can stop the service
     // the activities are bound with BIND_AUTO_CREATE, so the service will
     // remain around until the last activity disconnects
     stopSelf();
   }
 
-  /**
-   * Disconnect from the server
-   * 
-   * @param clientHandle
-   *            identifies the MqttConnection to use
-   * @param quiesceTimeout
-   *            in milliseconds
-   * @param invocationContext
-   *            arbitrary data to be passed back to the application
-   * @param activityToken
-   *            arbitrary identifier to be passed back to the Activity
-   */
-  public void disconnect(String clientHandle, long quiesceTimeout,
-      String invocationContext, String activityToken) {
-    MqttConnection client = getConnection(clientHandle);
-    client.disconnect(quiesceTimeout, invocationContext, activityToken);
-    connections.remove(clientHandle);
+	/**
+	 * Get the status of a specific client
+	 * 
+	 * @param clientHandle
+	 *            identifies the MqttConnection to use
+	 * @return true if the specified client is connected to an MQTT server
+	 */
+	public boolean isConnected(String clientHandle) {
+		MqttConnection client = getConnection(clientHandle);
+		return client.isConnected();
+	}
 
-    // the activity has finished using us, so we can stop the service
-    // the activities are bound with BIND_AUTO_CREATE, so the service will
-    // remain around until the last activity disconnects
-    stopSelf();
-  }
+	/**
+	 * Publish a message to a topic
+	 * 
+	 * @param clientHandle
+	 *            identifies the MqttConnection to use
+	 * @param topic
+	 *            the topic to which to publish
+	 * @param payload
+	 *            the content of the message to publish
+	 * @param qos
+	 *            the quality of service requested
+	 * @param retained
+	 *            whether the MQTT server should retain this message
+	 * @param invocationContext
+	 *            arbitrary data to be passed back to the application
+	 * @param activityToken
+	 *            arbitrary identifier to be passed back to the Activity
+	 * @throws MqttPersistenceException
+	 * @throws MqttException
+	 * @return token for tracking the operation
+	 */
+	public IMqttDeliveryToken publish(String clientHandle, String topic,
+			byte[] payload, int qos, boolean retained,
+			String invocationContext, String activityToken)
+			throws MqttPersistenceException, MqttException {
+		MqttConnection client = getConnection(clientHandle);
+		return client.publish(topic, payload, qos, retained, invocationContext,
+				activityToken);
+	}
 
-  /**
-   * Get the status of a specific client
-   * 
-   * @param clientHandle
-   *            identifies the MqttConnection to use
-   * @return true if the specified client is connected to an MQTT server
-   */
-  public boolean isConnected(String clientHandle) {
-    MqttConnection client = getConnection(clientHandle);
-    return client.isConnected();
-  }
-
-  /**
-   * Publish a message to a topic
-   * 
-   * @param clientHandle
-   *            identifies the MqttConnection to use
-   * @param topic
-   *            the topic to which to publish
-   * @param payload
-   *            the content of the message to publish
-   * @param qos
-   *            the quality of service requested
-   * @param retained
-   *            whether the MQTT server should retain this message
-   * @param invocationContext
-   *            arbitrary data to be passed back to the application
-   * @param activityToken
-   *            arbitrary identifier to be passed back to the Activity
-   * @throws MqttPersistenceException
-   * @throws MqttException
-   * @return token for tracking the operation
-   */
-  public IMqttDeliveryToken publish(String clientHandle, String topic,
-      byte[] payload, int qos, boolean retained,
-      String invocationContext, String activityToken)
-      throws MqttPersistenceException, MqttException {
-    MqttConnection client = getConnection(clientHandle);
-    return client.publish(topic, payload, qos, retained, invocationContext,
-        activityToken);
-  }
-
-  /**
-   * Publish a message to a topic
-   * 
-   * @param clientHandle
-   *            identifies the MqttConnection to use
-   * @param topic
-   *            the topic to which to publish
-   * @param message
-   *            the message to publish
-   * @param invocationContext
-   *            arbitrary data to be passed back to the application
-   * @param activityToken
-   *            arbitrary identifier to be passed back to the Activity
-   * @throws MqttPersistenceException
-   * @throws MqttException
-   * @return token for tracking the operation
-   */
-  public IMqttDeliveryToken publish(String clientHandle, String topic,
-      MqttMessage message, String invocationContext, String activityToken)
-      throws MqttPersistenceException, MqttException {
-    MqttConnection client = getConnection(clientHandle);
-    return client.publish(topic, message, invocationContext, activityToken);
-  }
+	/**
+	 * Publish a message to a topic
+	 * 
+	 * @param clientHandle
+	 *            identifies the MqttConnection to use
+	 * @param topic
+	 *            the topic to which to publish
+	 * @param message
+	 *            the message to publish
+	 * @param invocationContext
+	 *            arbitrary data to be passed back to the application
+	 * @param activityToken
+	 *            arbitrary identifier to be passed back to the Activity
+	 * @throws MqttPersistenceException
+	 * @throws MqttException
+	 * @return token for tracking the operation
+	 */
+	public IMqttDeliveryToken publish(String clientHandle, String topic,
+			MqttMessage message, String invocationContext, String activityToken)
+			throws MqttPersistenceException, MqttException {
+		MqttConnection client = getConnection(clientHandle);
+		return client.publish(topic, message, invocationContext, activityToken);
+	}
 
   /**
    * Subscribe to a topic
@@ -570,34 +634,115 @@ public class MqttService extends Service implements MqttTraceHandler {
     }
   }
 
-  // Extend Service
+	// Extend Service
 
-  /**
-   * @see android.app.Service#onCreate()
-   */
-  @Override
-  public void onCreate() {
-    super.onCreate();
+	/**
+	 * @see android.app.Service#onCreate()
+	 */
+	@Override
+	public void onCreate() {
+		super.onCreate();
 
-    // create a binder that will let the Activity UI send
-    // commands to the Service
-    mqttServiceBinder = new MqttServiceBinder(this);
+		Log.i(TAG, "start service  onCreate!");
+		// create a binder that will let the Activity UI send
+		// commands to the Service
+		mqttServiceBinder = new MqttServiceBinder(this);
 
-    // create somewhere to buffer received messages until
-    // we know that they have been passed to the application
-    messageStore = new DatabaseMessageStore(this, this);
+		// create somewhere to buffer received messages until
+		// we know that they have been passed to the application
+		messageStore = new DatabaseMessageStore(this, this);
 
-  }
+		persistence = new DatabaseConnectionPersistence(this);
 
-  /**
-   * @see android.app.Service#onDestroy()
-   */
-  @Override
-  public void onDestroy() {
-    // disconnect immediately
-    for (MqttConnection client : connections.values()) {
-      client.disconnect(null, null);
-    }
+		/**
+		 * when Mqtt service is onCreate read the application package name check
+		 * if there is a data of MqttServiceNotificationCallback for this app if
+		 * no, let's happy if yes,then check if the app is still running if yes,
+		 * let's happy if no, god, start to do the service level's notification
+		 * callback
+		 */
+		serviceNTFCallbackStore = new DatabaseServiceNotificationCallbackStore(
+				this, this);
+
+		String appPackageName = this.getApplicationInfo().packageName;
+
+		String serviceNTFCallbackCls = null;
+		// read app package name from sqllite
+		serviceNTFCallbackCls = serviceNTFCallbackStore
+				.getAppServiceNTFCallbackClass(appPackageName);
+
+		if (serviceNTFCallbackCls != null) {
+			// then check if the app is still running
+			ActivityManager am = (ActivityManager) this
+					.getSystemService(Context.ACTIVITY_SERVICE);
+			List<RunningTaskInfo> list = am.getRunningTasks(200);
+			for (RunningTaskInfo info : list) {
+				if (info.topActivity.getPackageName().equals(appPackageName)
+						&& info.baseActivity.getPackageName().equals(
+								appPackageName)) {
+					isAppRunning = true;
+					break;
+				}
+			}
+			// if app is not running, let's prepare service notification
+			if (isAppRunning == false) {
+				try {
+					Class cls = this.getClassLoader().loadClass(
+							serviceNTFCallbackCls);
+					this.serviceNTFCallback = (MqttServiceNotificationCallback) cls
+							.newInstance();
+					Log.i("MqttService",
+							"MqttService Notification Callback is init="
+									+ serviceNTFCallback);
+				} catch (ClassNotFoundException e) {
+					Log.e("MqttService", e.toString());
+				} catch (InstantiationException e) {
+					Log.e("MqttService", e.toString());
+				} catch (IllegalAccessException e) {
+					Log.e("MqttService", e.toString());
+				}
+
+				try {
+					List<ModelConnectionPersistence> l = persistence
+							.restoreConnections(this.getApplicationContext());
+					for (ModelConnectionPersistence c : l) {
+						String handle = getClient(c.getServerURI(), c.getId(),
+								c.getCtxId(), null);
+						connections.get(handle).setConnectOptions(
+								c.getConnectionOptions());
+						if (isOnline()) {
+							// we have an internet connection - have another try
+							// at
+							// connecting
+							connect(handle, c.getConnectionOptions(), null, "0");
+						}
+					}
+
+				} catch (ConnectionPersistenceException e) {
+					Log.e("MqttService", e.toString());
+				} catch (MqttSecurityException e) {
+					Log.e("MqttService", e.toString());
+
+				} catch (MqttException e) {
+					Log.e("MqttService", e.toString());
+				}
+			}
+		}
+	}
+
+	public ServiceNotificationCallbackStore getServiceNTFCallbackStore() {
+		return serviceNTFCallbackStore;
+	}
+
+	/**
+	 * @see android.app.Service#onDestroy()
+	 */
+	@Override
+	public void onDestroy() {
+		// disconnect immediately
+		for (MqttConnection client : connections.values()) {
+			client.disconnect(null, null);
+		}
 
     // clear down
     if (mqttServiceBinder != null) {
@@ -608,6 +753,8 @@ public class MqttService extends Service implements MqttTraceHandler {
 		
 		if (this.messageStore !=null )
 			this.messageStore.close();
+		if (this.serviceNTFCallbackStore != null)
+			this.serviceNTFCallbackStore.close();
 
 		super.onDestroy();
 	}
@@ -693,44 +840,53 @@ public class MqttService extends Service implements MqttTraceHandler {
     traceCallback(MqttServiceConstants.TRACE_ERROR, tag, message);
   }
 
-  private void traceCallback(String severity, String tag, String message) {
-    if ((traceCallbackId != null) && (traceEnabled)) {
-      Bundle dataBundle = new Bundle();
-      dataBundle.putString(MqttServiceConstants.CALLBACK_ACTION, MqttServiceConstants.TRACE_ACTION);
-      dataBundle.putString(MqttServiceConstants.CALLBACK_TRACE_SEVERITY, severity);
-      dataBundle.putString(MqttServiceConstants.CALLBACK_TRACE_TAG, tag);
-      //dataBundle.putString(MqttServiceConstants.CALLBACK_TRACE_ID, traceCallbackId);
-      dataBundle.putString(MqttServiceConstants.CALLBACK_ERROR_MESSAGE, message);
-      callbackToActivity(traceCallbackId, Status.ERROR, dataBundle);
-    }
-  }
+	private void traceCallback(String severity, String tag, String message) {
+		if ((traceCallbackId != null) && (traceEnabled)) {
+			Bundle dataBundle = new Bundle();
+			dataBundle.putString(MqttServiceConstants.CALLBACK_ACTION,
+					MqttServiceConstants.TRACE_ACTION);
+			dataBundle.putString(MqttServiceConstants.CALLBACK_TRACE_SEVERITY,
+					severity);
+			dataBundle.putString(MqttServiceConstants.CALLBACK_TRACE_TAG, tag);
+			// dataBundle.putString(MqttServiceConstants.CALLBACK_TRACE_ID,
+			// traceCallbackId);
+			dataBundle.putString(MqttServiceConstants.CALLBACK_ERROR_MESSAGE,
+					message);
+			callbackToActivity(traceCallbackId, Status.ERROR, dataBundle);
+		}
+	}
 
-  /**
-   * trace exceptions
-   * 
-   * @param tag
-   *            identifier for the source of the trace
-   * @param message
-   *            the text to be traced
-   * @param e
-   *            the exception
-   */
-  @Override
-  public void traceException(String tag, String message, Exception e) {
-    if (traceCallbackId != null) {
-      Bundle dataBundle = new Bundle();
-      dataBundle.putString(MqttServiceConstants.CALLBACK_ACTION, MqttServiceConstants.TRACE_ACTION);
-      dataBundle.putString(MqttServiceConstants.CALLBACK_TRACE_SEVERITY, MqttServiceConstants.TRACE_EXCEPTION);
-      dataBundle.putString(MqttServiceConstants.CALLBACK_ERROR_MESSAGE,  message);
-      dataBundle.putSerializable(MqttServiceConstants.CALLBACK_EXCEPTION, e); //TODO: Check 
-      dataBundle.putString(MqttServiceConstants.CALLBACK_TRACE_TAG, tag);
-      //dataBundle.putString(MqttServiceConstants.CALLBACK_TRACE_ID, traceCallbackId);
-      callbackToActivity(traceCallbackId, Status.ERROR, dataBundle);
-    }
-  }
-  
-  @SuppressWarnings("deprecation")
-  private void registerBroadcastReceivers() {
+	/**
+	 * trace exceptions
+	 * 
+	 * @param tag
+	 *            identifier for the source of the trace
+	 * @param message
+	 *            the text to be traced
+	 * @param e
+	 *            the exception
+	 */
+	@Override
+	public void traceException(String tag, String message, Exception e) {
+		if (traceCallbackId != null) {
+			Bundle dataBundle = new Bundle();
+			dataBundle.putString(MqttServiceConstants.CALLBACK_ACTION,
+					MqttServiceConstants.TRACE_ACTION);
+			dataBundle.putString(MqttServiceConstants.CALLBACK_TRACE_SEVERITY,
+					MqttServiceConstants.TRACE_EXCEPTION);
+			dataBundle.putString(MqttServiceConstants.CALLBACK_ERROR_MESSAGE,
+					message);
+			dataBundle.putSerializable(MqttServiceConstants.CALLBACK_EXCEPTION,
+					e); // TODO: Check
+			dataBundle.putString(MqttServiceConstants.CALLBACK_TRACE_TAG, tag);
+			// dataBundle.putString(MqttServiceConstants.CALLBACK_TRACE_ID,
+			// traceCallbackId);
+			callbackToActivity(traceCallbackId, Status.ERROR, dataBundle);
+		}
+	}
+
+	@SuppressWarnings("deprecation")
+	private void registerBroadcastReceivers() {
 		if (networkConnectionMonitor == null) {
 			networkConnectionMonitor = new NetworkConnectionIntentReceiver();
 			registerReceiver(networkConnectionMonitor, new IntentFilter(
@@ -817,7 +973,15 @@ public class MqttService extends Service implements MqttTraceHandler {
 			connection.offline();
 		}
 	}
-	
+
+	public boolean isAppRunning() {
+		return isAppRunning;
+	}
+
+	public void setAppRunning(boolean isAppRunning) {
+		this.isAppRunning = isAppRunning;
+	}
+
 	/**
 	 * Detect changes of the Allow Background Data setting - only used below
 	 * ICE_CREAM_SANDWICH
@@ -841,4 +1005,14 @@ public class MqttService extends Service implements MqttTraceHandler {
 			}
 		}
 	}
+
+	/**
+	 * notify to android notification bar
+	 */
+	public void callbackToNotification(String topic, MqttMessage message) {
+		if (this.isAppRunning == false && this.serviceNTFCallback != null) {
+			this.serviceNTFCallback.notify(this, topic, message);
+		}
+	}
+
 }
