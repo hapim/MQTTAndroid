@@ -1,4 +1,4 @@
-#Android Service Client
+#Android Service Client readme
 
 #Generate JavaDoc  
 1. Switch directory to ```cd org.eclipse.paho.android.service```
