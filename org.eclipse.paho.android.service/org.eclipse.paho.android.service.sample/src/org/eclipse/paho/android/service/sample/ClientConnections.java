@@ -247,6 +247,7 @@ public class ClientConnections extends ListActivity {
 
     MqttAndroidClient client;
     client = Connections.getInstance(this).createClient(this, uri, clientId);
+    
     // create a client handle
     String clientHandle = uri + clientId;
 
@@ -305,6 +306,10 @@ public class ClientConnections extends ListActivity {
       }
     }
     client.setCallback(new MqttCallbackHandler(this, clientHandle));
+    
+    //setServiceNotificationCallback
+    client.setServiceNotificationCallback(MyMqttServiceNtfCallback.class);
+    
     connection.addConnectionOptions(conOpt);
     Connections.getInstance(this).addConnection(connection);
     if (doConnect) {

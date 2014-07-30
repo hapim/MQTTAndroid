@@ -71,12 +71,44 @@ class MqttConnection implements MqttCallback {
 
 	// fields for the connection definition
 	private String serverURI;
+	public String getServerURI() {
+		return serverURI;
+	}
+
+	public void setServerURI(String serverURI) {
+		this.serverURI = serverURI;
+	}
+
+	public String getClientId() {
+		return clientId;
+	}
+
+	public void setClientId(String clientId) {
+		this.clientId = clientId;
+	}
+
 	private String clientId;
 	private MqttClientPersistence persistence = null;
 	private MqttConnectOptions connectOptions;
 
+	public MqttConnectOptions getConnectOptions() {
+		return connectOptions;
+	}
+
+	public void setConnectOptions(MqttConnectOptions connectOptions) {
+		this.connectOptions = connectOptions;
+	}
+
 	// Client handle, used for callbacks...
 	private String clientHandle;
+
+	public String getClientHandle() {
+		return clientHandle;
+	}
+
+	public void setClientHandle(String clientHandle) {
+		this.clientHandle = clientHandle;
+	}
 
 	//store connect ActivityToken for reconnect
 	private String connectActivityToken = null;
@@ -115,8 +147,9 @@ class MqttConnection implements MqttCallback {
 	 * @param clientId
 	 *            the name by which we will identify ourselves to the MQTT
 	 *            server
-	 * @param persistence the persistence class to use to store in-flight message. If null then the
-	 * 			default persistence mechanism is used
+	 * @param persistence
+	 *            the persistence class to use to store in-flight message. If
+	 *            null then the default persistence mechanism is used
 	 * @param clientHandle
 	 *            the "handle" by which the activity will identify us
 	 */
@@ -150,7 +183,8 @@ class MqttConnection implements MqttCallback {
 	 */
 	public void connect(MqttConnectOptions options, String invocationContext,
 			String activityToken) {
-
+		
+		final String internel_invocationContext = invocationContext;
 		connectOptions = options;
 		connectActivityToken = activityToken;
 
@@ -199,29 +233,50 @@ class MqttConnection implements MqttCallback {
 				persistence = new MqttDefaultFilePersistence(
 						myDir.getAbsolutePath());
 			}
-
-			myClient = new MqttAsyncClient(serverURI, clientId, persistence, 
-					new AlarmPingSender(service));
-			myClient.setCallback(this);
-			IMqttActionListener listener = new MqttConnectionListener(
-					resultBundle) {
-
+			
+			//if myClient exists, it means connection has been established when "service is restarted and app is dead"
+			//we should not connect again in case of misunderstanding connection lost
+			if (myClient!=null) {
+				doAfterConnectSuccess(resultBundle);
+			}
+			//if myClient is null, then create a new connection
+			else {
+				myClient = new MqttAsyncClient(serverURI, clientId, persistence, 
+						new AlarmPingSender(service));
+				myClient.setCallback(this);
+				IMqttActionListener listener = new MqttConnectionListener(
+						resultBundle) {
+	
+					@Override
+					public void onSuccess(IMqttToken asyncActionToken) {
+						doAfterConnectSuccess(resultBundle);
+					}
 				@Override
-				public void onSuccess(IMqttToken asyncActionToken) {
-					//since the device's cpu can go to sleep, acquire a wakelock and drop it later.
-					acquireWakeLock();
-					service.callbackToActivity(clientHandle, Status.OK,
-							resultBundle);
-					deliverBacklog();          
-					disconnected = false;
-					releaseWakeLock();
-				}
-			};
-			myClient.connect(connectOptions, invocationContext, listener);
+				public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
+					resultBundle.putString(MqttServiceConstants.CALLBACK_ERROR_MESSAGE,
+							exception.getLocalizedMessage());
+					
+					//if connect fail ,try reconnect.
+					connect(connectOptions, internel_invocationContext,connectActivityToken);
+					}
+				};
+				
+				myClient.connect(connectOptions, invocationContext, listener);
+			}
 		}
 		catch (Exception e) {
 			handleException(resultBundle, e);
 		}
+	}
+	
+	private void doAfterConnectSuccess(final Bundle resultBundle) {
+		//since the device's cpu can go to sleep, acquire a wakelock and drop it later.
+		acquireWakeLock();
+		service.callbackToActivity(clientHandle, Status.OK,
+				resultBundle);
+		deliverBacklog();          
+		disconnected = false;
+		releaseWakeLock();
 	}
 
 	private void handleException(final Bundle resultBundle, Exception e) {
@@ -385,7 +440,9 @@ class MqttConnection implements MqttCallback {
 	 * @return true if we are connected to an MQTT server
 	 */
 	public boolean isConnected() {
-		return myClient.isConnected();
+		if (myClient!=null)
+			return myClient.isConnected();
+		return false;
 	}
 
 	/**
@@ -716,7 +773,8 @@ class MqttConnection implements MqttCallback {
 					Log.getStackTraceString(why));
 		}
 		service.callbackToActivity(clientHandle, Status.OK, resultBundle);
-
+		
+		reconnect();
 		//client has lost connection no need for wake lock
 		releaseWakeLock();
 	}
@@ -782,13 +840,24 @@ class MqttConnection implements MqttCallback {
 
 		String messageId = service.messageStore.storeArrived(clientHandle,
 				topic, message);
-		Bundle resultBundle = messageToBundle(messageId, topic, message);
-		resultBundle.putString(MqttServiceConstants.CALLBACK_ACTION,
-				MqttServiceConstants.MESSAGE_ARRIVED_ACTION);
-		resultBundle.putString(MqttServiceConstants.CALLBACK_MESSAGE_ID,
-				messageId);
-		service.callbackToActivity(clientHandle, Status.OK, resultBundle);
-
+		
+		/**
+		 * if app is running, let's callback to activity
+		 * if app is dead, let's use service callback
+		 */
+		Log.i("MqttConnection","Get a message="+new String(message.getPayload()));
+		if (service.isAppRunning()) {		
+			Bundle resultBundle = messageToBundle(messageId, topic, message);
+			resultBundle.putString(MqttServiceConstants.CALLBACK_ACTION,
+					MqttServiceConstants.MESSAGE_ARRIVED_ACTION);
+			resultBundle.putString(MqttServiceConstants.CALLBACK_MESSAGE_ID,
+					messageId);
+			service.callbackToActivity(clientHandle, Status.OK, resultBundle);
+		}
+		else {
+			Log.i("MqttConnection","Notify message="+new String(message.getPayload()));
+			service.callbackToNotification(topic,message);
+		}
 	}
 
 	/**
@@ -883,6 +952,9 @@ class MqttConnection implements MqttCallback {
 	* multiple times 
 	*/
 	synchronized void reconnect() {
+		Log.i("MqttConnection", "reconnect param.isConnectiong:" + isConnecting
+				+ ";disconnected:" + disconnected + ";cleanSession:"
+				+ cleanSession);
 		if (isConnecting) {
 			service.traceDebug(TAG, "The client is connecting. Reconnect return directly.");
 			return ;
