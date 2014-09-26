@@ -1,0 +1,7 @@
+Verified+1: Hudson CI
+Code-Review+2: Al Stockdill-Mander <asm@uk.ibm.com>
+Submitted-by: Al Stockdill-Mander <asm@uk.ibm.com>
+Submitted-at: Fri, 26 Sep 2014 06:15:22 -0400
+Reviewed-on: https://git.eclipse.org/r/33861
+Project: paho/org.eclipse.paho.mqtt.java
+Branch: refs/heads/develop
