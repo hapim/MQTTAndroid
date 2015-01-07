@@ -94,7 +94,6 @@ public class ClientState {
 	private static final String PERSISTENCE_CONFIRMED_PREFIX = "sc-";
 	private static final String PERSISTENCE_RECEIVED_PREFIX = "r-";
 	
-	private static final int DEFAULT_MAX_INFLIGHT = 10;
 	private static final int MIN_MSG_ID = 1;		// Lowest possible MQTT message ID to use
 	private static final int MAX_MSG_ID = 65535;	// Highest possible MQTT message ID to use
 	private int nextMsgId = MIN_MSG_ID - 1;			// The next available message ID to use
@@ -110,7 +109,7 @@ public class ClientState {
 	private boolean cleanSession;
 	private MqttClientPersistence persistence;
 	
-	private int maxInflight = DEFAULT_MAX_INFLIGHT;	
+	private int maxInflight;	
 	private int actualInFlight = 0;
 	private int inFlightPubRels = 0;
 	
@@ -138,9 +137,9 @@ public class ClientState {
 		
 		log.setResourceName(clientComms.getClient().getClientId());
 		log.finer(CLASS_NAME, "<Init>", "" );
-
+        maxInflight = clientComms.getConOptions().getMaxInflight();
 		inUseMsgIds = new Hashtable();
-		pendingMessages = new Vector(this.maxInflight);
+		pendingMessages = new Vector(maxInflight);
 		pendingFlows = new Vector();
 		outboundQoS2 = new Hashtable();
 		outboundQoS1 = new Hashtable();
