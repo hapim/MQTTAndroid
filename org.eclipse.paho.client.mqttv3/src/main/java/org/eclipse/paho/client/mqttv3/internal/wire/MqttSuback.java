@@ -46,8 +46,7 @@ public class MqttSuback extends MqttAck {
 	}
 	
 	protected byte[] getVariableHeader() throws MqttException {
-		// Not needed, as the client never encodes a SUBACK
-		return new byte[0];
+        return encodeMessageId();
 	}
 
 	public String toString() {

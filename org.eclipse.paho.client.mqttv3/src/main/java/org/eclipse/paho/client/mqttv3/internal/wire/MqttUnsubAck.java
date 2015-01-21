@@ -36,7 +36,6 @@ public class MqttUnsubAck extends MqttAck {
 	}
 	
 	protected byte[] getVariableHeader() throws MqttException {
-		// Not needed, as the client never encodes an UNSUBACK
-		return new byte[0];
+        return encodeMessageId();
 	}
 }

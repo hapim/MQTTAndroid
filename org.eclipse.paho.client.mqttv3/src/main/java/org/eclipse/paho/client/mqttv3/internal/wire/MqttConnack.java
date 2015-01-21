@@ -45,8 +45,7 @@ public class MqttConnack extends MqttAck {
 	}
 
 	protected byte[] getVariableHeader() throws MqttException {
-		// Not needed, as the client never encodes a CONNACK
-		return new byte[0];
+        return new byte[] { 0, (byte) returnCode };
 	}
 	
 	/**

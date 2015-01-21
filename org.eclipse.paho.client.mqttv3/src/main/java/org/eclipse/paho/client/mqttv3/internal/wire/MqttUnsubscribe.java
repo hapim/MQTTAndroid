@@ -20,8 +20,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.util.Strings;
 
 /**
  * An on-the-wire representation of an MQTT UNSUBSCRIBE message.
@@ -29,7 +32,6 @@ import org.eclipse.paho.client.mqttv3.MqttException;
 public class MqttUnsubscribe extends MqttWireMessage {
 	
 	private String[] names;
-	private int count;
 
 	/**
 	 * Constructs an MqttUnsubscribe
@@ -52,16 +54,16 @@ public class MqttUnsubscribe extends MqttWireMessage {
 		DataInputStream dis = new DataInputStream(bais);
 		msgId = dis.readUnsignedShort();
 
-		count = 0;
-		names = new String[10];
+		List names = new ArrayList();
 		boolean end = false;
 		while (!end) {
 			try {
-				names[count] = decodeUTF8(dis);
+                names.add(decodeUTF8(dis));
 			} catch (Exception e) {
 				end = true;
 			}
 		}
+        this.names = Strings.toArray(names);
 		dis.close();
 	}
 
@@ -72,6 +74,7 @@ public class MqttUnsubscribe extends MqttWireMessage {
 		StringBuffer sb = new StringBuffer();
 		sb.append(super.toString());
 		sb.append(" names:[");
+        int count = names.length;
 		for (int i = 0; i < count; i++) {
 			if (i > 0) {
 				sb.append(", ");

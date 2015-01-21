@@ -15,12 +15,30 @@
  */
 package org.eclipse.paho.client.mqttv3.util;
 
+import java.util.Collection;
+
 /**
  * String helper
  */
 public final class Strings {
 	// Represents a failed index search.
 	private static final int INDEX_NOT_FOUND = -1;
+	
+    /**
+     * Convert a object collection to a string array.
+     * 
+     * @param collection
+     * @return string array
+     */
+    public static String[] toArray(Collection collection) {
+        Object[] objectArray = collection.toArray();
+        int len = objectArray.length;
+        String[] array = new String[len];
+        for (int i = 0; i < len; i++) {
+            array[i] = objectArray[i].toString();
+        }
+        return array;
+    }
 
 	/**
 	 * Checks if the CharSequence equals any character in the given set of characters.

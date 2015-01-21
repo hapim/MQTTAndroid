@@ -20,9 +20,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
+import org.eclipse.paho.client.mqttv3.util.Strings;
 
 
 /**
@@ -31,7 +35,6 @@ import org.eclipse.paho.client.mqttv3.MqttMessage;
 public class MqttSubscribe extends MqttWireMessage {
 	private String[] names;
 	private int[] qos;
-	private int count;
 
 	/**
 	 * Constructor for an on the wire MQTT subscribe message
@@ -45,20 +48,32 @@ public class MqttSubscribe extends MqttWireMessage {
 		DataInputStream dis = new DataInputStream(bais);
 		msgId = dis.readUnsignedShort();
 
-		count = 0;
-		names = new String[10];
-		qos = new int[10];
+        List names = new ArrayList();
+        List qos = new ArrayList();
 		boolean end = false;
 		while (!end) {
 			try {
-				names[count] = decodeUTF8(dis);
-				qos[count++] = dis.readByte();
+				names.add(decodeUTF8(dis));
+				qos.add(new Byte(dis.readByte()));
 			} catch (Exception e) {
 				end = true;
 			}
 		}
+        this.names = Strings.toArray(names);
+        this.qos = toIntArray(qos);
 		dis.close();
 	}
+	
+	
+    private int[] toIntArray(Collection collection) {
+        Object[] boxedArray = collection.toArray();
+        int len = boxedArray.length;
+        int[] array = new int[len];
+        for (int i = 0; i < len; i++) {
+            array[i] = ((Number) boxedArray[i]).intValue();
+        }
+        return array;
+    }
 
 	/**
 	 * Constructor for an on the wire MQTT subscribe message
@@ -85,6 +100,7 @@ public class MqttSubscribe extends MqttWireMessage {
 	public String toString() {
 		StringBuffer sb = new StringBuffer();
 		sb.append(super.toString());
+        int count = names.length;
 		sb.append(" names:[");
 		for (int i = 0; i < count; i++) {
 			if (i > 0) {
