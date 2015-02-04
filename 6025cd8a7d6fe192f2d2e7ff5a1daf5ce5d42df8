@@ -1,0 +1,7 @@
+Verified+1: Hudson CI
+Code-Review+2: Ian Craggs <icraggs@uk.ibm.com>
+Submitted-by: Ian Craggs <icraggs@uk.ibm.com>
+Submitted-at: Wed, 04 Feb 2015 10:43:29 -0500
+Reviewed-on: https://git.eclipse.org/r/39638
+Project: paho/org.eclipse.paho.mqtt.java
+Branch: refs/heads/develop
